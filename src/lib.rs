@@ -26,31 +26,114 @@ impl QueryGroup {
     }
 }
 
-fn is_match(query_group: &QueryGroup, path: &str) -> bool {
+#[pyclass]
+pub struct FileMatchResult {
+    #[pyo3(get)]
+    path: String,
+
+    #[pyo3(get)]
+    context: Option<String>,
+}
+
+fn is_match(query_group: &QueryGroup, path: &str) -> Option<FileMatchResult> {
     match fs::read_to_string(path) {
         Ok(contents) => {
             for pat in query_group.patterns.iter() {
                 if !pat.is_match(&contents) {
-                    return false;
+                    return None;
                 }
             }
-            true
+            Some(FileMatchResult {
+                path: String::from(path),
+                context: None,
+            })
         }
-        Err(_) => false
+        Err(_) => None
     }
 }
 
-pub fn search_text<'a>(query_group: &QueryGroup, textfile_paths: &'a Vec<String>, parallel: bool) -> Vec<&'a String> {
+fn is_match_context(query_group: &QueryGroup, path: &str, a: usize, b: usize) -> Option<FileMatchResult> {
+    match fs::read_to_string(path) {
+        Ok(contents) => {
+            let mut context = None;
+            for (i, pat) in query_group.patterns.iter().enumerate() {
+                if i == 0 {
+                    match pat.find(&contents) {
+                        None => return None,
+                        Some(m) => {
+                            let approx_start = if m.start() < a { 0 } else { m.start() - a };
+                            let approx_end = if m.end() + b > contents.len() { contents.len() } else { m.end() + b };
+                            context = Some(String::from(approx_substring(&contents, approx_start, approx_end)));
+                        }
+                    }
+                } else {
+                    if !pat.is_match(&contents) {
+                        return None;
+                    }
+                }
+            }
+            Some(FileMatchResult {
+                path: String::from(path),
+                context,
+            })
+        }
+        Err(_) => None
+    }
+}
+
+pub fn search_text(query_group: &QueryGroup, textfile_paths: &[String], parallel: bool) -> Vec<FileMatchResult> {
     if parallel {
         textfile_paths
             .par_iter()
-            .filter(|path| is_match(&query_group, path))
+            .filter_map(|path| is_match(&query_group, path))
             .collect()
     } else {
         textfile_paths
             .iter()
-            .filter(|path| is_match(&query_group, path))
+            .filter_map(|path| is_match(&query_group, path))
             .collect()
+    }
+}
+
+pub fn search_text_context(query_group: &QueryGroup, textfile_paths: &[String], a: usize, b: usize, parallel: bool) -> Vec<FileMatchResult> {
+    if parallel {
+        textfile_paths
+            .par_iter()
+            .filter_map(|path| is_match_context(&query_group, path, a, b))
+            .collect()
+    } else {
+        textfile_paths
+            .iter()
+            .filter_map(|path| is_match_context(&query_group, path, a, b))
+            .collect()
+    }
+}
+
+fn approx_substring(
+    contents: &str,
+    approx_start_byte_index: usize,
+    approx_end_byte_index: usize,
+) -> &str {
+    let end = contents.len();
+    let mut start_byte_index = approx_start_byte_index;
+    let mut end_byte_index = approx_end_byte_index;
+    while start_byte_index <= end {
+        if contents.is_char_boundary(start_byte_index) {
+            break;
+        }
+        start_byte_index += 1;
+    }
+    // when `end_byte_index` reaches 0, it must break out of the loop
+    loop {
+        if contents.is_char_boundary(end_byte_index) {
+            break;
+        }
+        end_byte_index -= 1;
+    }
+    if start_byte_index <= end_byte_index {
+        &contents[start_byte_index..end_byte_index]
+    } else {
+        ""
     }
 }
 
@@ -98,13 +181,11 @@ impl FilePaths {
 
 #[pyfunction]
 #[pyo3(name = "search_text")]
-pub fn py_search_text(query_group: &QueryGroup, textfile_paths: &FilePaths) -> Vec<String> {
-    let filtered: Vec<_> = search_text(query_group, &textfile_paths.paths, true);
-    let mut paths = Vec::new();
-    for p in filtered {
-        paths.push(String::from(p));
+pub fn py_search_text(query_group: &QueryGroup, textfile_paths: &FilePaths, a: Option<usize>, b: Option<usize>) -> Vec<FileMatchResult> {
+    match (a, b) {
+        (None, None) | (None, Some(_)) | (Some(_), None) => search_text(query_group, &textfile_paths.paths, true),
+        (Some(a), Some(b)) => search_text_context(query_group, &textfile_paths.paths, a, b, true),
     }
-    paths
 }
 
 #[pymodule]
@@ -297,7 +378,7 @@ mod tests {
         let paths = vec![String::from("sample_texts/hello.txt"), String::from("sample_texts/world.txt")];
         let result = search_text(&query_group, &paths, false);
         assert_eq!(result.len(), 1);
-        assert_eq!(result.iter().next(), Some(&&String::from("sample_texts/world.txt")));
+        assert_eq!(result.iter().next().unwrap().path, String::from("sample_texts/world.txt"));
 
         let query_group = QueryGroup::new(
             "bar".to_string(),
@@ -305,6 +386,6 @@ mod tests {
         let paths = vec![String::from("sample_texts/hello.txt"), String::from("sample_texts/world.txt")];
         let result = search_text(&query_group, &paths, false);
         assert_eq!(result.len(), 1);
-        assert_eq!(result.iter().next(), Some(&&String::from("sample_texts/hello.txt")));
+        assert_eq!(result.iter().next().unwrap().path, String::from("sample_texts/hello.txt"));
     }
 }
