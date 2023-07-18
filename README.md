@@ -8,10 +8,7 @@ A Python interface is designed to allow invocation of `search_text` in Python si
 
 ## AND-of-ORs-of-literals query
 
-- `primary_atom`: the primary literal to search for
 - `and_of_or_atoms`: e.g. `[[A, B], [C]]` means to search for (A **OR** B) **AND** (C) where each of A, B, C is a literal.
-
-`primary_atom` and `and_of_or_atoms` are **AND**ed together to form the overall query.
 
 ## Example usage from Python side
 
@@ -20,7 +17,6 @@ from glob import glob
 from textsearcher import textsearcher
 
 q = textsearcher.QueryGroup(
-    'primary_literal',
     [['A', 'alternative name for A'], ['B', 'alternative name for B']])
 files = textsearcher.FilePaths(glob('*.txt'))
 results = textsearcher.search_text(q, files)
