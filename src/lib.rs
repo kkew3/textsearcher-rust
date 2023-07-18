@@ -1,6 +1,7 @@
 use std::fs;
 use regex::{Regex, RegexBuilder};
 use rayon::prelude::*;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 
@@ -13,16 +14,18 @@ pub struct QueryGroup {
 #[pymethods]
 impl QueryGroup {
     #[new]
-    pub fn new(primary_atom: String, and_of_or_atoms: Vec<Vec<String>>) -> Self {
-        let primary_pattern = get_regex_for_atom(&primary_atom);
-        let mut patterns = vec![primary_pattern];
+    pub fn new(and_of_or_atoms: Vec<Vec<String>>) -> PyResult<Self> {
+        let mut patterns = Vec::new();
+        if and_of_or_atoms.is_empty() {
+            return Err(PyValueError::new_err("query group must not be empty"));
+        }
         for or_grp in and_of_or_atoms.iter() {
             patterns.push(get_regex_for_atoms(or_grp));
         }
 
-        QueryGroup {
+        Ok(QueryGroup {
             patterns,
-        }
+        })
     }
 }
 
@@ -370,19 +373,19 @@ mod tests {
         assert_eq!(_get_regex_for_atom(" 中文hello world   世界"), "中\\s*文\\s*hello\\s+world\\s*世\\s*界");
     }
 
+    // without Python package 'maturin', this test goes wrong false positively
     #[test]
     fn test_search_text() {
         let query_group = QueryGroup::new(
-            "world".to_string(),
-            vec![]);
+            vec![vec!["world".to_string()]]).unwrap();
         let paths = vec![String::from("sample_texts/hello.txt"), String::from("sample_texts/world.txt")];
         let result = search_text(&query_group, &paths, false);
         assert_eq!(result.len(), 1);
         assert_eq!(result.iter().next().unwrap().path, String::from("sample_texts/world.txt"));
 
         let query_group = QueryGroup::new(
-            "bar".to_string(),
-            vec![vec!["baz".to_string(), "xxxx哈哈".to_string()]]);
+            vec![vec!["bar".to_string()],
+                 vec!["baz".to_string(), "xxxx哈哈".to_string()]]).unwrap();
         let paths = vec![String::from("sample_texts/hello.txt"), String::from("sample_texts/world.txt")];
         let result = search_text(&query_group, &paths, false);
         assert_eq!(result.len(), 1);
