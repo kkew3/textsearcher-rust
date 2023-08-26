@@ -152,15 +152,15 @@ fn approx_substring(
 /// Build regex for atom query.
 /// See `test__get_regex_for_atom` for the transform rules.
 /// The regex is built so that it's robust to noise brought by pdf-to-text parsing.
-fn get_regex_for_atom(atom: &str) -> Regex {
-    let regex = _get_regex_for_atom(atom);
-    RegexBuilder::new(&regex)
-        .multi_line(true)
-        .case_insensitive(true)
-        .dot_matches_new_line(false)
-        .build()
-        .unwrap()
-}
+// fn get_regex_for_atom(atom: &str) -> Regex {
+//     let regex = _get_regex_for_atom(atom);
+//     RegexBuilder::new(&regex)
+//         .multi_line(true)
+//         .case_insensitive(true)
+//         .dot_matches_new_line(false)
+//         .build()
+//         .unwrap()
+// }
 
 /// The difference from `get_regex_for_atom` is that this OR the atoms together.
 fn get_regex_for_atoms(atoms: &Vec<String>) -> Regex {
