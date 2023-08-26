@@ -47,6 +47,15 @@ fn is_match_str(query_group: &QueryGroup, contents: &str) -> bool {
     true
 }
 
+fn count_match_str(query_group: &QueryGroup, contents: &str) -> Option<usize> {
+    if query_group.patterns.len() > 1 {
+        return None
+    }
+    let pat = &query_group.patterns[0];
+    let matches: Vec<_> = pat.find_iter(contents).collect();
+    Some(matches.len())
+}
+
 fn is_match(query_group: &QueryGroup, path: &str) -> Option<FileMatchResult> {
     match fs::read_to_string(path) {
         Ok(contents) => {
@@ -206,6 +215,12 @@ pub fn py_match_str(query_group: &QueryGroup, contents: &str) -> bool {
     is_match_str(query_group, contents)
 }
 
+#[pyfunction]
+#[pyo3(name = "count_match_str")]
+pub fn py_count_match_str(query_group: &QueryGroup, contents: &str) -> Option<usize> {
+    count_match_str(query_group, contents)
+}
+
 #[pymodule]
 #[pyo3(name = "textsearcher")]
 fn py_module(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
@@ -213,6 +228,7 @@ fn py_module(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<FilePaths>()?;
     m.add_function(wrap_pyfunction!(py_search_text, m)?)?;
     m.add_function(wrap_pyfunction!(py_match_str, m)?)?;
+    m.add_function(wrap_pyfunction!(py_count_match_str, m)?)?;
     Ok(())
 }
 
