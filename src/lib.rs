@@ -38,6 +38,15 @@ pub struct FileMatchResult {
     context: Option<String>,
 }
 
+fn is_match_str(query_group: &QueryGroup, contents: &str) -> bool {
+    for pat in query_group.patterns.iter() {
+        if !pat.is_match(contents) {
+            return false;
+        }
+    }
+    true
+}
+
 fn is_match(query_group: &QueryGroup, path: &str) -> Option<FileMatchResult> {
     match fs::read_to_string(path) {
         Ok(contents) => {
@@ -191,12 +200,19 @@ pub fn py_search_text(query_group: &QueryGroup, textfile_paths: &FilePaths, a: O
     }
 }
 
+#[pyfunction]
+#[pyo3(name = "match_str")]
+pub fn py_match_str(query_group: &QueryGroup, contents: &str) -> bool {
+    is_match_str(query_group, contents)
+}
+
 #[pymodule]
 #[pyo3(name = "textsearcher")]
 fn py_module(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<QueryGroup>()?;
     m.add_class::<FilePaths>()?;
     m.add_function(wrap_pyfunction!(py_search_text, m)?)?;
+    m.add_function(wrap_pyfunction!(py_match_str, m)?)?;
     Ok(())
 }
 
